@@ -9,22 +9,16 @@ import (
 	"path/filepath"
 
 	"github.com/bft-labs/cometbft-analyzer-types/pkg/events"
-	"github.com/bft-labs/cometbft-log-etl/pkg/converter"
-	"github.com/bft-labs/cometbft-log-etl/pkg/parser"
-	"github.com/bft-labs/cometbft-log-etl/pkg/processor"
+	"github.com/bft-labs/cometbft-log-etl/internal/converter"
+	"github.com/bft-labs/cometbft-log-etl/internal/parser"
 	"github.com/bft-labs/cometbft-log-etl/types"
 )
 
-// Service orchestrates reading log files and processing events.
-// It can be extended with different processors.
-type Service struct {
-	Processors []processor.EventProcessor
-}
+// Service orchestrates reading log files and converting to normalized events.
+type Service struct{}
 
-// NewService creates a Service with the given processors.
-func NewService(processors ...processor.EventProcessor) *Service {
-	return &Service{Processors: processors}
-}
+// NewService creates a Service.
+func NewService() *Service { return &Service{} }
 
 // ParseDirectory scans the given directory for log files, converts them to events,
 // and returns all events.
@@ -40,12 +34,12 @@ func (s *Service) ParseDirectory(ctx context.Context, dir string) ([]events.Even
 			continue
 		}
 		filePath := filepath.Join(dir, fName)
-		events, nodeID, valAddr, err := parseFile(filePath)
+		parsedEvents, nodeID, valAddr, err := parseFile(filePath)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", filePath, err)
 		}
-		attachMetadata(events, nodeID, valAddr)
-		entireEvents = append(entireEvents, events...)
+		attachMetadata(parsedEvents, nodeID, valAddr)
+		entireEvents = append(entireEvents, parsedEvents...)
 	}
 	return entireEvents, nil
 }
@@ -109,13 +103,4 @@ func attachMetadata(eventsList []events.Event, nodeID, valAddr string) {
 	}
 }
 
-// ProcessEvents processes the events using all of the service's processors.
-func (s *Service) ProcessEvents(events []events.Event) {
-	for _, evt := range events {
-		for _, proc := range s.Processors {
-			if err := proc.Process(evt); err != nil {
-				log.Printf("process error: %v", err)
-			}
-		}
-	}
-}
+// (processing happens via plugins; no direct processor invocation here)

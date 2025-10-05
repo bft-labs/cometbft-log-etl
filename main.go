@@ -2,13 +2,23 @@ package main
 
 import (
 	"context"
-	"github.com/bft-labs/cometbft-analyzer-types/pkg/events"
-	"github.com/bft-labs/cometbft-log-etl/pkg/app"
-	"github.com/bft-labs/cometbft-log-etl/pkg/config"
-	"github.com/bft-labs/cometbft-log-etl/pkg/processor"
-	"github.com/bft-labs/cometbft-log-etl/pkg/storage"
+	"github.com/bft-labs/cometbft-log-etl/internal/app"
+	"github.com/bft-labs/cometbft-log-etl/internal/config"
+	"github.com/bft-labs/cometbft-log-etl/internal/storage"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/block-parts"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/consensus-steps"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/consensus-timing"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/network-latency"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/p2p-messages"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/timeout-analysis"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/validator-participation"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/vote-latency"
+	"github.com/bft-labs/cometbft-log-etl/pkg/pluginloader"
+	"github.com/bft-labs/cometbft-log-etl/pkg/pluginsdk"
 	"log"
+	"os/signal"
 	"sort"
+	"syscall"
 )
 
 func main() {
@@ -18,7 +28,10 @@ func main() {
 		log.Fatalf("Load config: %v", err)
 	}
 
-	ctx := context.Background()
+	// Graceful shutdown context
+	base := context.Background()
+	ctx, stop := signal.NotifyContext(base, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Setup storage
 	mongoStorage, err := storage.NewMongoStorageWithSimulation(ctx, cfg.MongoURI, cfg.SimulationID)
@@ -27,14 +40,8 @@ func main() {
 	}
 	defer mongoStorage.Close(ctx)
 
-	// Setup processor manager
-	processorManager := processor.NewProcessorManager()
-	if err := processorManager.CreateDefaultProcessors(ctx); err != nil {
-		log.Fatalf("Create processors: %v", err)
-	}
-
-	// Create service
-	srv := app.NewService(processorManager.GetProcessors()...)
+	// Fully pluginized path: always use plugins (default processor plugins are auto-enabled).
+	srv := app.NewService() // no built-in processors; plugins handle processing
 
 	// Parse events from directory
 	entireEvents, err := srv.ParseDirectory(ctx, cfg.Directory)
@@ -52,57 +59,25 @@ func main() {
 		}
 	}
 
-	// Process events
-	processorManager.ProcessEvents(entireEvents)
-
-	// Collect processor results and add universal P2P events back to main events stream
-	results := processorManager.CollectResults()
-	var totalResults int
-	var universalP2pEvents []interface{}
-	var consensusStepEvents []interface{}
-
-	for _, result := range results {
-		// If this is the P2P messages collection, add these events back to main stream
-		if result.CollectionName == "p2p_messages" {
-			universalP2pEvents = append(universalP2pEvents, result.Data...)
-			log.Printf("Adding %d universal P2P events back to main events stream", len(result.Data))
-		}
-
-		// If this is the consensus steps collection, collect these for frontend
-		if result.CollectionName == "consensus_steps" {
-			consensusStepEvents = append(consensusStepEvents, result.Data...)
-			log.Printf("Collected %d consensus step events for frontend", len(result.Data))
-		}
-
-		if err := mongoStorage.StoreResults(ctx, result.Data, result.CollectionName); err != nil {
-			log.Printf("Store results error for %s: %v", result.CollectionName, err)
-		} else {
-			totalResults += len(result.Data)
-			log.Printf("Stored %d results in %s collection", len(result.Data), result.CollectionName)
-		}
+	// Initialize plugin loader and context
+	pctx := pluginsdk.Context{
+		Ctx:     ctx,
+		Logger:  log.Default(),
+		Storage: mongoStorage,
+		Metrics: pluginsdk.NoopMetrics{},
+		Config:  cfg,
 	}
-
-	// Create frontend collection combining consensus steps with important P2P messages
-	frontendEvents := append(consensusStepEvents, universalP2pEvents...)
-	// Sort frontend events by timestamp
-	sort.Slice(frontendEvents, func(i, j int) bool {
-		// Change both i and j to events.Event to access GetTimestamp method
-		frontendEventI, okI := frontendEvents[i].(events.Event)
-		frontendEventJ, okJ := frontendEvents[j].(events.Event)
-		if !okI || !okJ {
-			log.Printf("Skipping sorting for non-event types: %T and %T", frontendEvents[i], frontendEvents[j])
-			return false
-		}
-		return frontendEventI.GetTimestamp().Before(frontendEventJ.GetTimestamp())
-	})
-	if len(frontendEvents) > 0 {
-		if err := mongoStorage.StoreResults(ctx, frontendEvents, "consensus_events"); err != nil {
-			log.Printf("Store frontend consensus events error: %v", err)
-		} else {
-			log.Printf("Stored %d events in frontend_consensus collection (consensus: %d, p2p: %d)",
-				len(frontendEvents), len(consensusStepEvents), len(universalP2pEvents))
-		}
+	pl, err := pluginloader.New(ctx, pctx, cfg.Plugins)
+	if err != nil {
+		log.Fatalf("Init plugins: %v", err)
 	}
+	defer pl.Finalize()
 
-	log.Printf("Successfully processed %d events and stored %d total results", len(entireEvents), totalResults)
+	// Dispatch events to plugins (core-processors handles processing + persistence)
+	for _, evt := range entireEvents {
+		pl.Dispatch(evt)
+	}
+	log.Printf("Successfully processed %d events via plugins", len(entireEvents))
 }
+
+// legacy helper removed; we always run via plugins now

@@ -23,6 +23,11 @@ fmt:
 	go fmt ./...
 	gofmt -s -w .
 
+run:
+	@[ -n "$(DIR)" ] || DIR=example-logs/normal; \
+	[ -n "$(SIM)" ] || SIM=demo-sim; \
+	go run . -dir $$DIR -simulation $$SIM
+
 # Release: create an annotated git tag for manual builds
 # Usage:
 #   make release VERSION=v0.1.0           # creates tag v0.1.0

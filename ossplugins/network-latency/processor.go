@@ -1,15 +1,21 @@
-package processor
+package networklatency
 
 import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/bft-labs/cometbft-analyzer-types/pkg/statistics/latency"
 	"sort"
 	"time"
 
 	"github.com/bft-labs/cometbft-analyzer-types/pkg/events"
+	"github.com/bft-labs/cometbft-analyzer-types/pkg/statistics/latency"
 )
+
+// ProcessorResult matches the original structure used for multi-collection returns.
+type ProcessorResult struct {
+	Data           []interface{}
+	CollectionName string
+}
 
 // NetworkLatencyProcessor analyzes message latencies between peers to identify slow connections.
 type NetworkLatencyProcessor struct {
@@ -51,8 +57,6 @@ type NetworkLatencyProcessor struct {
 	// Raw-hash keyed stats for cases without peer direction (e.g., TrySend)
 	rawKeyStats map[string]*KeyTrafficStats
 }
-
-// (all state-channel gossip messages are included by default)
 
 // NewNetworkLatencyProcessor creates a new network latency processor.
 func NewNetworkLatencyProcessor(ctx context.Context) *NetworkLatencyProcessor {
@@ -262,11 +266,7 @@ func (p *NetworkLatencyProcessor) handleReceive(evt events.Event, messageType st
 			NodeID:        evt.GetNodeId(),
 			ValidatorAddr: evt.GetValidatorAddress(),
 		}
-		if compositeKey != "" {
-			p.pendingReceives[compositeKey] = append(p.pendingReceives[compositeKey], pr)
-		} else {
-			p.pendingReceivesByRaw[pr.RawHash] = append(p.pendingReceivesByRaw[pr.RawHash], pr)
-		}
+		p.pendingReceives[compositeKey] = append(p.pendingReceives[compositeKey], pr)
 		// Try raw-hash fallback immediate match (e.g., TrySend without peerID)
 		if p.rawHashFallbackMatch(evt, messageType) {
 			return
@@ -282,15 +282,13 @@ func (p *NetworkLatencyProcessor) handleReceive(evt events.Event, messageType st
 	} else {
 		p.pendingSends[compositeKey] = sendList[1:]
 	}
-	latency := evt.GetTimestamp().Sub(pendingSend.SentTime)
-	latencyMs := latency.Milliseconds()
+	elapsed := evt.GetTimestamp().Sub(pendingSend.SentTime)
+	latencyMs := elapsed.Milliseconds()
 
 	ks.MatchCount++
 
 	// Record latency in node pair stats
 	p.recordLatency(evt.GetNodeId(), pendingSend.NodeID, messageType, latencyMs, evt.GetTimestamp(), evt.GetValidatorAddress(), pendingSend.ValidatorAddr)
-
-	// Removal handled above when popping from slice
 }
 
 // rawHashFallbackMatch attempts to match by raw hash only when peerID is unavailable or differs.
@@ -308,8 +306,8 @@ func (p *NetworkLatencyProcessor) rawHashFallbackMatch(evt events.Event, message
 		p.pendingSendsByRaw[rawHash] = sendList[1:]
 	}
 
-	latency := evt.GetTimestamp().Sub(pendingSend.SentTime)
-	latencyMs := latency.Milliseconds()
+	elapsed := evt.GetTimestamp().Sub(pendingSend.SentTime)
+	latencyMs := elapsed.Milliseconds()
 	// Key for stats uses unknown peer; fall back to node pair (recv node, send node)
 	p.recordLatency(evt.GetNodeId(), pendingSend.NodeID, messageType, latencyMs, evt.GetTimestamp(), evt.GetValidatorAddress(), pendingSend.ValidatorAddr)
 	// Update raw-hash stats duplicates and receive counts
@@ -382,9 +380,6 @@ func (p *NetworkLatencyProcessor) recordLatency(nodeA, nodeB, messageType string
 	// Note: Percentile-based categorization is done after all data is collected
 	// in calculateStatistics() function, since we need all latencies to compute percentiles
 }
-
-// getChannelNameSafe safely gets channel name, avoiding import cycles
-// getChannelNameSafe removed (unused after raw-bytes matching overhaul)
 
 // normalizeNodePair creates a canonical node pair key by sorting nodes alphabetically.
 func (p *NetworkLatencyProcessor) normalizeNodePair(nodeA, nodeB string) (string, string, string) {
