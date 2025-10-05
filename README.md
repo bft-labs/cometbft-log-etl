@@ -2,6 +2,8 @@
 
 Open-source ETL for CometBFT logs. Drop in log files, get a normalized database with core metrics. A lightweight plugin system enables advanced analyses as separate OSS or premium plugins without changing the core.
 
+Note: This project is under active development. Interfaces, plugin names, and collection schemas may evolve. Check release notes and examples before pinning to a specific API.
+
 ## Quickstart
 
 - Requirements: Go 1.21+ and a local MongoDB.
@@ -88,10 +90,9 @@ Environment flag for premium:
 
 ## Project Structure
 
-- `internal/parser`, `internal/converter`, `internal/storage`, `internal/app`, `internal/config` – core ETL code used by the binary
-- `pkg/pluginsdk`, `pkg/pluginloader` – public SDK + loader for OSS/premium/custom plugins
-- `pkg/pluginsdk` – Plugin interfaces and Context
-- `pkg/pluginloader` – Loader, registry, lifecycle, dispatching
+- `internal/app`, `internal/parser`, `internal/converter`, `internal/storage`, `internal/config` – core ETL code used by the binary
+- `pkg/pluginsdk` – public Plugin SDK (interfaces, Context, PluginConfig)
+- `pkg/pluginloader` – public Loader (registry + lifecycle + dispatching)
 - `ossplugins/` – Open-source plugins (each processor owns its logic under its plugin directory)
 - `premiumplugins/` – README + stubs only (no code)
 
@@ -130,7 +131,16 @@ type Storage interface {
 
 ## Example OSS Plugins
 
-`ossplugins/processors` – registers one plugin per built-in processor (vote-latency, block-parts, p2p-messages, consensus-steps, consensus-timing, validator-participation, network-latency, timeout-analysis).
+Each built-in processor is provided as a standalone plugin (logic + registration co-located):
+
+- `ossplugins/vote-latency`
+- `ossplugins/block-parts`
+- `ossplugins/p2p-messages`
+- `ossplugins/consensus-steps`
+- `ossplugins/consensus-timing`
+- `ossplugins/validator-participation`
+- `ossplugins/network-latency`
+- `ossplugins/timeout-analysis`
 
 ## Writing Your Own Plugin
 
