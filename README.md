@@ -169,3 +169,8 @@ func init() { pluginloader.Register("hello-world", func() pluginsdk.Plugin { ret
 - For core changes: keep updates minimal and focused. Avoid coupling core to plugins.
 - For plugins: prefer storing results via the provided `Storage` interface. Avoid importing internals beyond the SDK.
 - PRs adding more OSS plugins and hooks are welcome.
+
+## License
+
+This project is licensed under the Apache License 2.0.
+See the `LICENSE` file for details.
