@@ -76,6 +76,12 @@ func Dispatch(raw []byte) (interface{}, error) {
 		return nil, nil
 	}
 
+	// 1.5) Skip any consensus step entries logged "with invalid args"
+	// These are spurious transitions and should not produce events.
+	if msg := strings.ToLower(header.Msg); strings.Contains(msg, "with invalid args") {
+		return nil, nil
+	}
+
 	// 2) Find the parser function (case-insensitive on `_msg`)
 	// Prefer case-insensitive lookup to tolerate variations like
 	// "entering propose step" vs "Entering propose step".
