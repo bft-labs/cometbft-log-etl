@@ -59,6 +59,10 @@ func parseFile(filePath string) ([]events.Event, string, string, error) {
 		validatorAddress string
 	)
 	scanner := bufio.NewScanner(f)
+	// Increase buffer to handle very long log lines (default is 64K).
+	// Allocate a 1MB initial buffer with a generous 64MB max token size.
+	buf := make([]byte, 0, 1<<20)
+	scanner.Buffer(buf, 64<<20)
 	for scanner.Scan() {
 		raw := make([]byte, len(scanner.Bytes()))
 		copy(raw, scanner.Bytes())

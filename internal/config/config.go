@@ -77,6 +77,7 @@ func ensureDefaultCoreProcessors(c *Config) {
 		{Name: "validator-participation", Enabled: true},
 		{Name: "network-latency", Enabled: true},
 		{Name: "timeout-analysis", Enabled: true},
+		{Name: "tracer-events", Enabled: true},
 	}
 	c.Plugins = append(c.Plugins, defaults...)
 }
