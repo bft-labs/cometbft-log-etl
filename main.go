@@ -11,8 +11,10 @@ import (
 	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/network-latency"
 	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/p2p-messages"
 	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/timeout-analysis"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/tracer-events"
+	_ "githu
 	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/validator-participation"
-	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/vote-latency"
+	_ "github.com/bft-labs/cometbft-log-etl/ossplugins/tracer-events"
 	"github.com/bft-labs/cometbft-log-etl/pkg/pluginloader"
 	"github.com/bft-labs/cometbft-log-etl/pkg/pluginsdk"
 	"log"

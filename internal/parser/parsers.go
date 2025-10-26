@@ -105,8 +105,15 @@ func parseEnteringNewStep(raw []byte) (interface{}, error) {
 	}
 
 	var targetStep string
+	lowerMsg := strings.ToLower(header.Msg)
 	for _, step := range targetSteps {
-		if strings.Contains(header.Msg, step) {
+		// Match case-insensitively and allow both underscore/spaces variants
+		if strings.Contains(lowerMsg, step) {
+			targetStep = step
+			break
+		}
+		spaced := strings.ReplaceAll(step, "_", " ")
+		if spaced != step && strings.Contains(lowerMsg, spaced) {
 			targetStep = step
 			break
 		}
